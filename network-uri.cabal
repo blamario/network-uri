@@ -1,5 +1,5 @@
 name:                network-uri
-version:             2.6.0.1
+version:             2.6.1
 synopsis:            URI manipulation
 description:
   This package provides an URI manipulation inteface.
@@ -33,11 +33,13 @@ cabal-version:       >=1.10
 
 library
   exposed-modules:
-    Network.URI
+    Network.URI, Network.URI.Monoid, Network.URI.Monoid.String
   build-depends:
     base >= 3 && < 5,
     deepseq >= 1.1 && < 1.4,
-    parsec >= 3.0 && < 3.2
+    parsec >= 3.0 && < 3.2,
+    picoparsec >= 0.1.2 && < 0.2,
+    monoid-subclasses >= 0.4 && < 0.5
   default-extensions: CPP, DeriveDataTypeable
  if impl(ghc >= 7.6) {
   default-extensions: DeriveGeneric

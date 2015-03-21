@@ -35,8 +35,8 @@
 
 module Main where
 
-import Network.URI
-    ( URI(..), URIAuth(..)
+import Network.URI.Monoid.String
+    ( URI, URIAuth, GenURI(..), GenURIAuth(..)
     , nullURI
     , parseURI, parseURIReference, parseRelativeReference, parseAbsoluteURI
     , parseAbsoluteURI
@@ -1065,7 +1065,7 @@ ts02str = "http://user:...@example.org:99/aaa/bbb?ccc#ddd/eee"
 ts03str = "http://user:pass@example.org:99/aaa/bbb?ccc#ddd/eee"
 ts04str = "http://user:...@example.org:99/aaa/bbb?ccc#ddd/eee"
 
-testShowURI01 = testEq "testShowURI01" ""      (show nullURI)
+testShowURI01 = testEq "testShowURI01" ""      (show (nullURI :: URI))
 testShowURI02 = testEq "testShowURI02" ts02str (show ts02URI)
 testShowURI03 = testEq "testShowURI03" ts03str ((uriToString id ts02URI) "")
 testShowURI04 = testEq "testShowURI04" ts04str (show ts04URI)
