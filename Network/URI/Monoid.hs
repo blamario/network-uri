@@ -64,12 +64,6 @@ module Network.URI.Monoid
     , normalizeCase
     , normalizeEscape
     , normalizePathSegments
-
-    -- * Deprecated functions
-    , parseabsoluteURI
-    , escapeString
-    , reserved, unreserved
-    , scheme, authority, path, query, fragment
     ) where
 
 import Prelude hiding (elem, null, reverse)
@@ -1129,7 +1123,7 @@ relPathFrom pabs base
 --  relPathFrom1 strips off trailing names from the supplied paths,
 --  and calls difPathFrom to find the relative path from base to
 --  target
-relPathFrom1 :: (Eq s, IsString s, TextualMonoid s) => s -> s -> s
+relPathFrom1 :: (Eq s, TextualMonoid s) => s -> s -> s
 relPathFrom1 pabs base = relName
     where
         (sa,na) = splitLast pabs
@@ -1219,56 +1213,6 @@ normalizePathSegments uristr = normstr juri
         normstr Nothing  = uristr
         normstr (Just u) = show (normuri u)
         normuri u = u { uriPath = removeDotSegments (uriPath u) }
-
-------------------------------------------------------------
---  Deprecated functions
-------------------------------------------------------------
-
-{-# DEPRECATED parseabsoluteURI "use parseAbsoluteURI" #-}
-parseabsoluteURI :: String -> Maybe (GenURI String)
-parseabsoluteURI = parseAbsoluteURI
-
-{-# DEPRECATED escapeString "use escapeURIString, and note the flipped arguments" #-}
-escapeString :: String -> (Char->Bool) -> String
-escapeString = flip escapeURIString
-
-{-# DEPRECATED reserved "use isReserved" #-}
-reserved :: Char -> Bool
-reserved = isReserved
-
-{-# DEPRECATED unreserved "use isUnreserved" #-}
-unreserved :: Char -> Bool
-unreserved = isUnreserved
-
---  Additional component access functions for backward compatibility
-
-{-# DEPRECATED scheme "use uriScheme" #-}
-scheme :: GenURI String -> String
-scheme = orNull init . uriScheme
-
-{-# DEPRECATED authority "use uriAuthority, and note changed functionality" #-}
-authority :: GenURI String -> String
-authority = dropss . ($"") . uriAuthToString id . uriAuthority
-    where
-        -- Old-style authority component does not include leading '//'
-        dropss ('/':'/':s) = s
-        dropss s           = s
-
-{-# DEPRECATED path "use uriPath" #-}
-path :: GenURI String -> String
-path = uriPath
-
-{-# DEPRECATED query "use uriQuery, and note changed functionality" #-}
-query :: GenURI String -> String
-query = orNull tail . uriQuery
-
-{-# DEPRECATED fragment "use uriFragment, and note changed functionality" #-}
-fragment :: GenURI String -> String
-fragment = orNull tail . uriFragment
-
-orNull :: ([a]->[a]) -> [a] -> [a]
-orNull _ [] = []
-orNull f as = f as
 
 --------------------------------------------------------------------------------
 --

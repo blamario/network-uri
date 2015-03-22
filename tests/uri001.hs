@@ -36,7 +36,7 @@
 module Main where
 
 import Network.URI.Monoid.String
-    ( URI, URIAuth, GenURI(..), GenURIAuth(..)
+    ( URI, GenURI(..), GenURIAuth(..)
     , nullURI
     , parseURI, parseURIReference, parseRelativeReference, parseAbsoluteURI
     , parseAbsoluteURI
