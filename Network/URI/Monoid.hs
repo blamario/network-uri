@@ -66,7 +66,7 @@ module Network.URI.Monoid
     , normalizePathSegments
     ) where
 
-import Prelude hiding (elem, null, reverse)
+import Prelude hiding (concatMap, elem, map, null, reverse)
 
 import Data.Picoparsec
     ( Parser
@@ -82,15 +82,20 @@ import Control.Monad (void)
 import Data.Traversable (sequenceA)
 import Control.DeepSeq (NFData(rnf), deepseq)
 import Data.Char (ord, chr, isHexDigit, toLower, toUpper, digitToInt)
-import Data.Bits ((.|.),(.&.),shiftL,shiftR)
+import Data.Bits ((.&.),shiftR)
 import Numeric (showIntAtBase)
-import Data.Maybe (isJust)
+import qualified Data.ByteString as ByteString
+import qualified Data.Foldable as Foldable
+import qualified Data.Monoid.Factorial as Factorial
 import qualified Data.List as List
+import Data.Maybe (fromMaybe, isJust)
 import Data.Monoid (Monoid, mconcat, mempty, (<>))
 import Data.Monoid.Cancellative (stripPrefix)
 import Data.Monoid.Null (MonoidNull, null)
 import Data.Monoid.Factorial (reverse)
-import Data.Monoid.Textual (TextualMonoid, break_, characterPrefix, elem, singleton, splitCharacterPrefix)
+import Data.Monoid.Textual (TextualMonoid, break_, characterPrefix, concatMap, elem, map, mapAccumL, singleton, span_, 
+                            split, splitCharacterPrefix)
+import Data.Monoid.Instances.ByteString.UTF8 (ByteStringUTF8(..))
 import Data.String (IsString, fromString)
 
 import Data.Typeable (Typeable)
@@ -848,7 +853,7 @@ isUnescapedInURIComponent c = not (isReserved c || not (isUnescapedInURI c))
 escapeURIChar :: (Char->Bool) -> Char -> String
 escapeURIChar p c
     | p c       = [c]
-    | otherwise = concatMap (\i -> '%' : myShowHex i "") (utf8EncodeChar c)
+    | otherwise = List.concatMap (\i -> '%' : myShowHex i "") (utf8EncodeChar c)
     where
         myShowHex :: Int -> ShowS
         myShowHex n r =  case showIntAtBase 16 (toChrHex) n r of
@@ -863,7 +868,7 @@ escapeURIChar p c
 -- by Eric Mertens, BSD3
 -- Returns [Int] for use with showIntAtBase
 utf8EncodeChar :: Char -> [Int]
-utf8EncodeChar = map fromIntegral . go . ord
+utf8EncodeChar = List.map fromIntegral . go . ord
  where
   go oc
    | oc <= 0x7f       = [oc]
@@ -885,62 +890,28 @@ utf8EncodeChar = map fromIntegral . go . ord
 -- |Can be used to make a string valid for use in a URI.
 --
 escapeURIString
-    :: (Char->Bool)     -- ^ a predicate which returns 'False'
+    :: TextualMonoid s =>
+       (Char->Bool)     -- ^ a predicate which returns 'False'
                         --   if the character should be escaped
-    -> String           -- ^ the string to process
-    -> String           -- ^ the resulting URI string
-escapeURIString p s = concatMap (escapeURIChar p) s
+    -> s                -- ^ the string to process
+    -> s                -- ^ the resulting URI string
+escapeURIString p s = concatMap (fromString . escapeURIChar p) s
 
 -- |Turns all instances of escaped characters in the string back
 --  into literal characters.
 --
-unEscapeString :: String -> String
-unEscapeString [] = ""
-unEscapeString s@(c:cs) = case unEscapeByte s of
-    Just (byte, rest) -> unEscapeUtf8 byte rest
-    Nothing -> c : unEscapeString cs
-
-unEscapeByte :: String -> Maybe (Int, String)
-unEscapeByte ('%':x1:x2:s) | isHexDigit x1 && isHexDigit x2 =
-    Just (digitToInt x1 * 16 + digitToInt x2, s)
-unEscapeByte _ = Nothing
-
--- Adapted from http://hackage.haskell.org/package/utf8-string
--- by Eric Mertens, BSD3
-unEscapeUtf8 :: Int -> String -> String
-unEscapeUtf8 c rest
-    | c < 0x80 = chr c : unEscapeString rest
-    | c < 0xc0 = replacement_character : unEscapeString rest
-    | c < 0xe0 = multi1
-    | c < 0xf0 = multi_byte 2 0xf 0x800
-    | c < 0xf8 = multi_byte 3 0x7 0x10000
-    | c < 0xfc = multi_byte 4 0x3 0x200000
-    | c < 0xfe = multi_byte 5 0x1 0x4000000
-    | otherwise    = replacement_character : unEscapeString rest
-    where
-    replacement_character = '\xfffd'
-    multi1 = case unEscapeByte rest of
-      Just (c1, ds) | c1 .&. 0xc0 == 0x80 ->
-        let d = ((fromEnum c .&. 0x1f) `shiftL` 6) .|.  fromEnum (c1 .&. 0x3f)
-        in if d >= 0x000080 then toEnum d : unEscapeString ds
-                            else replacement_character : unEscapeString ds
-      _ -> replacement_character : unEscapeString rest
-
-    multi_byte :: Int -> Int -> Int -> String
-    multi_byte i mask overlong =
-      aux i rest (unEscapeByte rest) (c .&. mask)
-      where
-        aux 0 rs _ acc
-          | overlong <= acc && acc <= 0x10ffff &&
-            (acc < 0xd800 || 0xdfff < acc)     &&
-            (acc < 0xfffe || 0xffff < acc)      = chr acc : unEscapeString rs
-          | otherwise = replacement_character : unEscapeString rs
-
-        aux n _ (Just (r, rs)) acc
-          | r .&. 0xc0 == 0x80 = aux (n-1) rs (unEscapeByte rs)
-                               $! shiftL acc 6 .|. (r .&. 0x3f)
-
-        aux _ rs _ _ = replacement_character : unEscapeString rs
+unEscapeString :: TextualMonoid s => s -> s
+unEscapeString uristr = prefix <> Foldable.foldMap (either fromUTF8 id) (List.foldr joinLefts [] $ List.concatMap unEscapeOne rest)
+   where prefix:rest = split (== '%') uristr
+         unEscapeOne chunk
+            | Just (h1, cs1) <- splitCharacterPrefix chunk
+            , Just (h2, cs2) <- splitCharacterPrefix cs1
+            , isHexDigit h1 && isHexDigit h2 =
+              Left (ByteString.singleton $ toEnum $ digitToInt h1*16+digitToInt h2) : if null cs2 then [] else [Right cs2]
+            | otherwise = [Right $ singleton '%' <> chunk]
+         joinLefts (Left bytes1) (Left bytes2 : chunks) = Left (bytes1 <> bytes2) : chunks
+         joinLefts chunk chunks = chunk : chunks
+         fromUTF8 = Factorial.foldMap (singleton . fromMaybe '\xfffd' . characterPrefix) . ByteStringUTF8
 
 ------------------------------------------------------------
 -- Resolving a relative URI relative to a base URI
@@ -1183,35 +1154,40 @@ difSegsFrom sabs base
 -- |Case normalization; cf. RFC3986 section 6.2.2.1
 --  NOTE:  authority case normalization is not performed
 --
-normalizeCase :: String -> String
-normalizeCase uristr = ncScheme uristr
-    where
-        ncScheme (':':cs)                = ':':ncEscape cs
-        ncScheme (c:cs) | isSchemeChar c = toLower c:ncScheme cs
-        ncScheme _                       = ncEscape uristr -- no scheme present
-        ncEscape ('%':h1:h2:cs) = '%':toUpper h1:toUpper h2:ncEscape cs
-        ncEscape (c:cs)         = c:ncEscape cs
-        ncEscape []             = []
+normalizeCase :: TextualMonoid s => s -> s
+normalizeCase uristr 
+   | Just ':' <- characterPrefix rest = map toLower scheme <> ncEscapes rest
+   | otherwise = ncEscapes uristr
+   where (scheme, rest) = span_ False isSchemeChar uristr
+         ncEscapes = snd . mapAccumL ncEscape 0
+         ncEscape :: Int -> Char -> (Int, Char)
+         ncEscape 0 '%' = (1, '%')
+         ncEscape 1 c = (2, toUpper c)
+         ncEscape 2 c = (0, toUpper c)
+         ncEscape ~0 c = (0, c)
 
 -- |Encoding normalization; cf. RFC3986 section 6.2.2.2
 --
-normalizeEscape :: String -> String
-normalizeEscape ('%':h1:h2:cs)
-    | isHexDigit h1 && isHexDigit h2 && isUnreserved escval =
-        escval:normalizeEscape cs
-    where
-        escval = chr (digitToInt h1*16+digitToInt h2)
-normalizeEscape (c:cs)         = c:normalizeEscape cs
-normalizeEscape []             = []
+normalizeEscape :: TextualMonoid s => s -> s
+normalizeEscape uristr = prefix <> Foldable.foldMap normalizeOne rest
+   where prefix:rest = split (== '%') uristr
+         normalizeOne chunk
+            | Just (h1, cs1) <- splitCharacterPrefix chunk
+            , Just (h2, cs2) <- splitCharacterPrefix cs1
+            , isHexDigit h1 && isHexDigit h2 
+            , escval <- chr (digitToInt h1*16+digitToInt h2)
+            , isUnreserved escval = 
+               singleton escval <> cs2
+            | otherwise = singleton '%' <> chunk
 
 -- |Path segment normalization; cf. RFC3986 section 6.2.2.3
 --
-normalizePathSegments :: String -> String
+normalizePathSegments :: (Eq s, Show s, TextualMonoid s) => s -> s
 normalizePathSegments uristr = normstr juri
     where
         juri = parseURI uristr
         normstr Nothing  = uristr
-        normstr (Just u) = show (normuri u)
+        normstr (Just u) = uriToString defaultUserInfoMap (normuri u) mempty
         normuri u = u { uriPath = removeDotSegments (uriPath u) }
 
 --------------------------------------------------------------------------------

@@ -39,7 +39,8 @@ library
     deepseq >= 1.1 && < 1.4,
     parsec >= 3.0 && < 3.2,
     picoparsec >= 0.1.2 && < 0.2,
-    monoid-subclasses >= 0.4 && < 0.5
+    monoid-subclasses >= 0.4 && < 0.5,
+    bytestring < 1
   default-extensions: CPP, DeriveDataTypeable
  if impl(ghc >= 7.6) {
   default-extensions: DeriveGeneric
