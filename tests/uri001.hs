@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 {-# OPTIONS_GHC -fno-warn-missing-signatures #-}
 --------------------------------------------------------------------------------
 --  $Id: URITest.hs,v 1.8 2005/07/19 22:01:27 gklyne Exp $
@@ -35,8 +36,13 @@
 
 module Main where
 
+#if TestMonoidString
 import Network.URI.Monoid.String
     ( URI, GenURI(..), GenURIAuth(..)
+#else
+import Network.URI
+    ( URI(..), URIAuth(..)
+#endif
     , nullURI
     , parseURI, parseURIReference, parseRelativeReference, parseAbsoluteURI
     , parseAbsoluteURI
