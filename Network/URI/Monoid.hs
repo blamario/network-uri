@@ -73,7 +73,7 @@ import Data.Picoparsec
     , parseOnly, (<?>), try
     , option, many1, count
     , char, satisfyChar, string, endOfInput
-    , takeCharsWhile1
+    , takeCharsWhile, takeCharsWhile1
     )
 import Data.Picoparsec.Combinator (notFollowedBy)
 
@@ -551,9 +551,9 @@ nameChar = singleton <$> unreservedChar <|> escaped <|> singleton <$> subDelims
 
 port :: TextualMonoid s => URIParser s s
 port =
-    do  { void $ char ':'
-        ; p <- many digitChar
-        ; return $ fromString (':':p)
+    do  { void $ string ":"
+        ; p <- takeCharsWhile isDigitChar
+        ; return (":" <> p)
         }
 
 --
@@ -768,7 +768,7 @@ hexDigitChar = satisfyChar isHexDigitChar   -- or: Parsec.hexDigit ?
 
 --  Additional parser combinators for common patterns
 
-oneThenMany :: Monoid s =>Parser s a -> Parser s a -> Parser s [a]
+oneThenMany :: Monoid s => Parser s a -> Parser s a -> Parser s [a]
 oneThenMany p1 pr =
     do  { a1 <- p1
         ; ar <- many pr
